@@ -8,7 +8,21 @@ except ImportError:
     Sequence = list
 
 BuiltinAssertionError = py.builtin.builtins.AssertionError
-u = py.builtin._totext
+
+
+def safe_unicode(value, encoding='utf-8'):
+    if isinstance(value, unicode):
+        return value
+    elif isinstance(value, basestring):
+        try:
+            value = unicode(value, encoding)
+        except UnicodeDecodeError:
+            value = value.decode('utf-8', 'replace')
+
+    return value
+
+# Fix unicode decode issues, for now
+u = safe_unicode    # used to be py.builtin._totext
 
 # The _reprcompare attribute on the util module is used by the new assertion
 # interpretation code and assertion rewriter to detect this plugin was
@@ -103,7 +117,7 @@ def _format_lines(lines):
             stack.append(len(result))
             stackcnt[-1] += 1
             stackcnt.append(0)
-            result.append(u(' +') + u('  ')*(len(stack)-1) + s + line[1:])
+            result.append(u(' +') + u('  ')*(len(stack)-1) + s + u(line[1:]))
         elif line.startswith('}'):
             stack.pop()
             stackcnt.pop()
@@ -112,7 +126,7 @@ def _format_lines(lines):
             assert line[0] in ['~', '>']
             stack[-1] += 1
             indent = len(stack) if line.startswith('~') else len(stack) - 1
-            result.append(u('  ')*indent + line[1:])
+            result.append(u('  ')*indent + u(line[1:]))
     assert len(stack) == 1
     return result
 
@@ -129,7 +143,14 @@ def assertrepr_compare(config, op, left, right):
     width = 80 - 15 - len(op) - 2  # 15 chars indentation, 1 space around op
     left_repr = py.io.saferepr(left, maxsize=int(width/2))
     right_repr = py.io.saferepr(right, maxsize=width-len(left_repr))
-    summary = u('%s %s %s') % (left_repr, op, right_repr)
+
+    # the reencoding is needed for python2 repr
+    # with non-ascii characters (see isssue 877)
+    summary = u('%s %s %s') % (
+        u(left_repr),
+        op,
+        u(right_repr),
+    )
 
     issequence = lambda x: (isinstance(x, (list, tuple, Sequence))
                             and not isinstance(x, basestring))
